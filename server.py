@@ -5,6 +5,54 @@ import sqlite3
 import datetime
 import uuid
 from dataclasses import dataclass
+import cv2
+import pytesseract
+import openai
+
+openai.api_key = "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"
+
+# List of properties for each digitized letter
+letterproperties = [
+    "Sent from",
+    "Subject",
+    "Date Received",
+    "Date Uploaded"
+    "Category",
+    "Tags",
+    "Actions",
+    "Preview",
+    "Sent to",
+    "Source Image",
+    "Searchable Content",
+    "Notes"
+]
+
+
+# List of categories for organizing digitized mail
+lettercategories = [
+    "Bills",
+    "Financial Documents",
+    "Correspondence",
+    "Official Documents",
+    "Healthcare",
+    "Education",
+    "Home",
+    "Work",
+    "Subscriptions",
+    "Travel",
+    "Government",
+    "Personal",
+    "Receipts",
+    "Miscellaneous",
+    "Custom Categories"
+]
+
+
+
+
+
+
+
 
 app = Flask(__name__)
 
@@ -32,7 +80,26 @@ def process_letterentry(currentfile, file_path,filename):
 	ltr = letterentry(filename,file_path, 'TBD','General','Unknown') 
 	return ltr
 
+def image_to_text(filepath):
+    print('processing OCR for file: '+filepath)
+    # Load image
+    img = cv2.imread(filepath)
 
+    # Convert image to grayscale
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    for i in range(3):
+        rotate_img = cv2.rotate(gray, cv2.ROTATE_90_CLOCKWISE)
+        gray = rotate_img
+        # Apply threshold to convert to binary image
+        threshold_img = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+        adaptiveimage = cv2.adaptiveThreshold(threshold_img,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
+                cv2.THRESH_BINARY,11,2)
+        
+        # Pass the image through pytesseract
+        result_text = pytesseract.image_to_string(adaptiveimage)
+        print('Result text is: '+result_text)
+    return result_text 
 
 def generate_file_name():
     current_time = datetime.datetime.now()
@@ -132,6 +199,8 @@ def upload_file():
             print(file_path)
             file.save(file_path)
             print ('File saved to local filesystem successfully')
+            str = image_to_text(file_path)
+            print('image_to_text output: '+str)
             currentfile = file
             letter = process_letterentry(currentfile, file_path, filename)
             print (letter.filename)
