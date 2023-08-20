@@ -1,0 +1,13 @@
+/*!
+  * chartjs-adapter-moment v1.0.0
+  * https://www.chartjs.org
+  * (c) 2021 chartjs-adapter-moment Contributors
+  * Released under the MIT license
+  */
+
+/*!
+ * Chart.js v3.3.0
+ * https://www.chartjs.org
+ * (c) 2021 Chart.js Contributors
+ * Released under the MIT License
+ */

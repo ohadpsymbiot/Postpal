@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunk_postman_app_renderer=self.webpackChunk_postman_app_renderer||[]).push([[113],{"./runtime-repl/extensible-collection/contextbar/ExtensibleCollectionInfo/ExtensibleCollectionInfoCBController.js":function(e,n,t){t.r(n),t.d(n,{default:function(){return l}});class l{didCreate(){}}}}]);

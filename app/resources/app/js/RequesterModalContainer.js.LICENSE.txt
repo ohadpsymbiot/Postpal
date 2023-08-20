@@ -1,0 +1,28 @@
+/*!
+	Copyright (c) 2018 Jed Watson.
+	Licensed under the MIT License (MIT), see
+	http://jedwatson.github.io/classnames
+*/
+
+/*!
+ * Platform.js v1.3.6
+ * Copyright 2014-2020 Benjamin Tan
+ * Copyright 2011-2013 John-David Dalton
+ * Available under MIT license
+ */
+
+/*!
+ * https://github.com/Starcounter-Jack/JSON-Patch
+ * (c) 2017 Joachim Wester
+ * MIT license
+ */
+
+//! Copyright (c) JS Foundation and other contributors
+
+//! github.com/moment/moment-timezone
+
+//! license : MIT
+
+//! moment-timezone.js
+
+//! version : 0.5.14
