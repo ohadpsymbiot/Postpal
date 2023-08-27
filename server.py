@@ -242,18 +242,73 @@ def scan_orig(imgfile):
 
     return final
 
+def processimageforocr2(imgfilepath):
+    
+    # Grayscale, Gaussian blur, Otsu's threshold
+    image = cv2.imread(imgfilepath)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (1,1), 0)
+    thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+
+    # Morph open to remove noise and invert image
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1,1))
+    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
+    invert = 255 - opening
+
+    # Perform text extraction
+    data = pytesseract.image_to_string(invert, lang='eng', config='--psm 6')
+    print(data)
+
+    #cv2.imshow('thresh', thresh)
+    #cv2.imshow('opening', opening)
+    #cv2.imshow('invert', invert)
+    #cv2.waitKey()
+    return invert
+
+def findtextareas(imgfilepath):
+    # Load image, grayscale, Gaussian blur, adaptive threshold
+    image = cv2.imread(imgfilepath)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (9,9), 0)
+    thresh = cv2.adaptiveThreshold(blur,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV,11,2)
+
+    # Dilate to combine adjacent text contours
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7,7))
+    dilate = cv2.dilate(thresh, kernel, iterations=4)
+
+    # Find contours, highlight text areas, and extract ROIs
+    cnts = cv2.findContours(dilate, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnts = cnts[0] if len(cnts) == 2 else cnts[1]
+
+    ROI_number = 0
+    for c in cnts:
+        area = cv2.contourArea(c)
+        if area > 10000:
+            x,y,w,h = cv2.boundingRect(c)
+            cv2.rectangle(image, (x, y), (x + w, y + h), (36,255,12), 3)
+            # ROI = image[y:y+h, x:x+w]
+            # cv2.imwrite('ROI_{}.png'.format(ROI_number), ROI)
+            # ROI_number += 1
+
+    cv2.imshow('thresh', thresh)
+    cv2.imshow('dilate', dilate)
+    cv2.imshow('image', image)
+    cv2.waitKey()
+
 def scan2(imgfilepath):
+    #Read the original image
     big_img = cv2.imread(imgfilepath)
     #cv2.imshow('org img',big_img)
     #cv2.waitKey(0)
 
-
+    #Resize the image
     ratio = big_img.shape[0] / 500.0
     org = big_img.copy()
     img = imutils.resize(big_img, height = 500)
     #cv2.imshow('resizing',img)
     #cv2.waitKey(0)
 
+    #Blur the image to extract shapes only
     kernel = np.ones((5,5),np.uint8)
 
     img = cv2.morphologyEx(img, cv2.MORPH_CLOSE, kernel, iterations= 5)
@@ -265,13 +320,13 @@ def scan2(imgfilepath):
     #cv2.imshow('Noise reduction',img)
     #cv2.waitKey(0)
 
-    
+    #grayscal image
     gray_img = cv2.cvtColor(img.copy(),cv2.COLOR_BGR2GRAY)
     #blur_img = cv2.GaussianBlur(gray_img,(5,5),0)
     
     #cv2.imshow('grayed blured image',gray_img)
     #cv2.waitKey(0)
-
+    #Extract edges from image
     imageMedian = np.median(gray_img)
     s = 0.33
     if imageMedian > 191:  # light images
@@ -293,12 +348,12 @@ def scan2(imgfilepath):
 
     #cv2.imshow('edged',edged_img)
     #cv2.waitKey(0)
-
+    #dialate the found edges
     dilated = cv2.dilate(edged_img.copy(), None, iterations=3)
     #cv2.imshow('dilated',dilated)
     #cv2.waitKey(0)
 
-
+    #identify the largest rectangle, assume it is our piece of paper
     cnts,_ = cv2.findContours(dilated.copy(),cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
     cnts = sorted(cnts,key=cv2.contourArea,reverse=True)[:5]
     found = False
@@ -310,15 +365,17 @@ def scan2(imgfilepath):
             found = True
             doc = approx
             break
-    #couldn't find proper contour, return error
+    #couldn't find proper contour, we couldn't find the rectangular form of the letter, return error
     if (found == False):
         print ('failed to process for OCR. Send original image to pytesseract')
+
         #Apply threashold on the original picture - assuming it is already correctly positioned for OCR
         T = threshold_local(org, 35, offset = 10, method = "gaussian")
         org = (org > T).astype("uint8") * 255
         return org
 
             
+    #Rotate the image to be aligned
     p=[]
     for d in doc:
         tuple_point = tuple(d[0])
@@ -694,15 +751,15 @@ def detect_logos(image_path):
 
 def extract_fields_from_text(inputtext):
     prompt = """
-    Extract the following fields:
-    - Sent from
-    - Subject
-    - Date Received
-    - Category
-    - Tags
+    Act as a document analyzer with expertiese in understanding context from a document. Analyze the following text and extract the following fields as accurately as possible, if a certain field is not found, return N/A:
+    - Sent from (is the entity who sent the letter)
+    - Subject (is the subject or title of this letter)
+    - Date Received (is the date in which the letter was sent)
+    - Category (extract the context category based on text analysis)
+    - Tags 
     - Actions
     - Preview
-    - Sent to
+    - Sent to (the receipient of the letter)
     - Notes
 
     Text: """
@@ -714,31 +771,36 @@ def extract_fields_from_text(inputtext):
     )
 
     extracted_fields = response.choices[0].text.strip()
+    if(extracted_fields == None):
+        print('could not extract fields from document')
+        return
 
     print('extracted fields: '+ extracted_fields)
      #Extract specific fields using regular expressions
-    sent_from = re.search(r"Sent from: (.+)", extracted_fields).group(1)
-    subject = re.search(r"Subject: (.+)", extracted_fields).group(1)
-    date_received = re.search(r"Date Received: (.+)", extracted_fields).group(1)
-    date_uploaded = datetime.datetime.now()
-    category = re.search(r"Category: (.+)", extracted_fields).group(1)
-    tags = re.search(r"Tags: (.+)", extracted_fields).group(1)
-    actions = re.search(r"Actions: (.+)", extracted_fields).group(1)
-    preview = re.search(r"Preview: (.+)", extracted_fields).group(1)
-    sent_to = re.search(r"Sent To: (.+)", extracted_fields).group(1)
-    notes = re.search(r"Notes: (.+)", extracted_fields).group(1)
-     #Print the extracted fields
-    print("Sent from:", sent_from)
-    print("Subject:", subject)
-    print("Date Received:", date_received)
-    print("Date Uploaded:", date_uploaded)
-    print("Category:", category)
-    print("Tags:", tags)
-    print("Actions:", actions)
-    print("Preview:", preview)
-    print("Sent to:", sent_to)
-    print("Notes:", notes)
-
+    try:
+        sent_from = re.search(r"Sent from: (.+)", extracted_fields).group(1)
+        subject = re.search(r"Subject: (.+)", extracted_fields).group(1)
+        date_received = re.search(r"Date Received: (.+)", extracted_fields).group(1)
+        date_uploaded = datetime.datetime.now()
+        category = re.search(r"Category: (.+)", extracted_fields).group(1)
+        tags = re.search(r"Tags: (.+)", extracted_fields).group(1)
+        actions = re.search(r"Actions: (.+)", extracted_fields).group(1)
+        preview = re.search(r"Preview: (.+)", extracted_fields).group(1)
+        sent_to = re.search(r"Sent To: (.+)", extracted_fields).group(1)
+        notes = re.search(r"Notes: (.+)", extracted_fields).group(1)
+        #Print the extracted fields
+        print("Sent from:", sent_from)
+        print("Subject:", subject)
+        print("Date Received:", date_received)
+        print("Date Uploaded:", date_uploaded)
+        print("Category:", category)
+        print("Tags:", tags)
+        print("Actions:", actions)
+        print("Preview:", preview)
+        print("Sent to:", sent_to)
+        print("Notes:", notes)
+    except AttributeError:
+        return extracted_fields
 
     return extracted_fields
 
@@ -846,19 +908,22 @@ def upload_file():
             print ('File saved to local filesystem successfully')
             # Align the image for pytesseract
             #alignedimg = alignimage(file_path)
-            processedimg = scan2(file_path)
+        #    findtextareas(file_path)
+            processedimg = processimageforocr2(file_path)
+        #    processedimg = scan2(file_path)
             print ('image processed')
             #cv2.imshow('processed image',processedimg)
             #cv2.waitKey(0)
             rotate_img = cv2.rotate(processedimg, cv2.ROTATE_180)
-            #cv2.imshow('rotated image',rotate_img)
-            #cv2.waitKey(0)
+            cv2.imshow('rotated image',rotate_img)
+            cv2.waitKey(0)
             
             #processimageforocr(file_path)
             imagetext = image_to_text(rotate_img)
             print('image_to_text output: '+imagetext+'End of image_to_text output')
-            if (image_to_text != ""):
-                extract_fields_from_text(imagetext)
+            extracted_fields = ""
+            if (imagetext != ""):
+                extracted_fields = extract_fields_from_text(imagetext)
             else:
                 print('error processing fields')
             currentfile = file
@@ -871,7 +936,7 @@ def upload_file():
                 db.execute("INSERT INTO files (filename, filepath) VALUES (?, ?)", (filename, file_path))
             print ('File saved to database successfully')
             
-            return jsonify({'message': 'File uploaded successfully'}), 200
+            return jsonify({'message': 'File uploaded successfully'+extracted_fields}), 200
         else:
             return jsonify({'error': 'Invalid file type'}), 400
     
