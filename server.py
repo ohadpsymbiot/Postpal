@@ -14,6 +14,10 @@ import numpy as np
 import imutils
 from imutils.perspective import four_point_transform
 from skimage.filters import threshold_local
+import mysql.connector
+import traceback
+import json
+
 
 
 
@@ -51,8 +55,7 @@ lettercategories = [
     "Government",
     "Personal",
     "Receipts",
-    "Miscellaneous",
-    "Custom Categories"
+    "Miscellaneous"
 ]
 
 
@@ -81,58 +84,146 @@ class letterentry:
 	title: str = 'TBD'
 	category: str = 'General'
 	sender: str = 'Unknown'
-	
+
+@dataclass
+class LetterEntry:
+    sent_from: str
+    subject: str
+    date_received: str
+    date_uploaded: str
+    category: str
+    tags: list[str]
+    actions: list[str]
+    preview: str
+    sent_to: str
+    source_image_path: str
+    searchable_content: str
+    notes: str
+
+
+def create_tables():
+    # Replace these with your own database credentials
+    cursor= get_db()
+            
+    try:
+        
+        # Create 'users' table
+        create_users_table = """
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(50) NOT NULL,
+            email VARCHAR(100) NOT NULL
+        )
+        """
+        cursor.execute(create_users_table)
+
+        # Create 'letters' table
+        create_letters_table = """
+        CREATE TABLE IF NOT EXISTS letters (
+            letter_id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            sent_from VARCHAR(100),
+            subject VARCHAR(200),
+            date_received DATE,
+            date_uploaded DATETIME,
+            category VARCHAR(50),
+            tags TEXT,
+            actions TEXT,
+            preview TEXT,
+            sent_to VARCHAR(100),
+            source_image_path VARCHAR(200),
+            searchable_content TEXT,
+            notes TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(user_id)
+        )
+        """
+        cursor.execute(create_letters_table)
+
+
+        print("Tables created successfully!")
+
+    except mysql.connector.Error as error:
+        print("Error:", error)
+
+def add_letter(user_id, sent_from, subject, date_received, date_uploaded, category, tags, actions, preview, sent_to, source_image_path, searchable_content, notes):
+    print('adding letter.../n')
+    # Replace these with your own database credentials
+    cursor = get_db()
+    try:
+        
+        # Insert letter into the 'letters' table
+        insert_query = """
+        INSERT INTO letters (user_id, sent_from, subject, date_received, date_uploaded, category, tags, actions, preview, sent_to, source_image_path, searchable_content, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+        cursor.execute(insert_query, (user_id, sent_from, subject, date_received, date_uploaded, category, tags, actions, preview, sent_to, source_image_path, searchable_content, notes))
+
+        
+        print("Letter added successfully!")
+
+    except mysql.connector.Error as error:
+        print("Error:", error)
+
+
+def add_user(username, email,userid):
+    print('adding user.../n')
+    cursor = get_db()
+    try:
+        # Insert user into the 'users' table
+        insert_query = "INSERT INTO users (username, email,user_id) VALUES (?, ?, ?)"
+        cursor.execute(insert_query,(username, email, userid))
+
+        print("User added successfully!")
+
+    except mysql.connector.Error as error:
+        print("Error:", error)
+
+
+
+def edit_letter(letter_id, new_subject, new_category, new_tags, new_actions, new_preview, new_notes):
+    cursor = get_db()
+
+    try:
+
+        # Update letter in the 'letters' table
+        update_query = """
+        UPDATE letters
+        SET subject = %s, category = %s, tags = %s, actions = %s, preview = %s, notes = %s
+        WHERE letter_id = %s
+        """
+        letter_data = (new_subject, new_category, new_tags, new_actions, new_preview, new_notes, letter_id)
+        cursor.execute(update_query, letter_data)
+
+        print("Letter updated successfully!")
+
+    except mysql.connector.Error as error:
+        print("Error:", error)
 
 def process_letterentry(currentfile, file_path,filename):
 	print ('processing letter entry for file: '+currentfile.filename+' original and generated: ' +filename)
 	ltr = letterentry(filename,file_path, 'TBD','General','Unknown') 
+
 	return ltr
+
+def get_value_from_key(key, str):
+    key = key+  "(.+)"
+    value = re.search(key, str)
+    if(value != None):
+        return value.group(1)
+    else:
+        return ""
 
 def image_to_text(img):
     print('processing OCR ')
     
-   
-    # Load image
-    #img = cv2.imread(filepath)
-
-    # Convert image to grayscale
-    #gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-      # Apply threshold to convert to binary image
-    #threshold_img = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-    #adaptiveimage = cv2.adaptiveThreshold(threshold_img,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
-    #            cv2.THRESH_BINARY,11,2)
-      
-    # Initialize a dictionary to store angle-frequency pairs
-    #angle_freq_dict = {}
-    #for i in range(4):
-    #    rotate_img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
-    #    gray = rotate_img
-        # Pass the image through pytesseract
+   # Pass the image through pytesseract
     result_text = pytesseract.image_to_string(img, lang="nld")
-    print ('Result text is: '+result_text)
+    #print ('Result text is: '+result_text)
     #angle_freq_dict[i] = result_text
-    print ('number of keywords = '+str(result_text.count("\n")))
+    #print ('number of keywords = '+str(result_text.count("\n")))
     
-        # Calculate the optimal angle with the highest frequency of recognized text
-    #return angle_freq_dict[max(angle_freq_dict, key=lambda k: angle_freq_dict[k].count("\n"))]
     return result_text
 
-        #Ask if the text makes sense - DOES NOT SEEM TO BE RELIABLE
-        #response = openai.Completion.create(
-        #engine="text-davinci-003",
-        #prompt=(f"Act as a document analyzer expert. Answer in yes or no. is the following text coherent?: '{result_text}'\n\nAnswer: "),
-        #max_tokens=50
-        #)
-        #responsestr = response.choices[0].text.strip()
-        #print(result_text)
-        #print('Coherent? '+responsestr)
-
-        #if(responsestr == "Yes"):
-        #    print('Returning Result text ')
-        #    return result_text
-    #if we haven't returned anything yet, return an empty string
-    return "" 
-
+   
 
 def order_points(pts):
     '''Rearrange coordinates to order:
@@ -256,8 +347,8 @@ def processimageforocr2(imgfilepath):
     invert = 255 - opening
 
     # Perform text extraction
-    data = pytesseract.image_to_string(invert, lang='eng', config='--psm 6')
-    print(data)
+    #data = pytesseract.image_to_string(invert, lang='eng', config='--psm 6')
+    #print(data)
 
     #cv2.imshow('thresh', thresh)
     #cv2.imshow('opening', opening)
@@ -750,59 +841,53 @@ def detect_logos(image_path):
 
 
 def extract_fields_from_text(inputtext):
-    prompt = """
-    Act as a document analyzer with expertiese in understanding context from a document. Analyze the following text and extract the following fields as accurately as possible, if a certain field is not found, return N/A:
+    commandprompt = """
+    Act as a document analyzer with expertiese in understanding context from a document. 
+    Analyze the following text and extract the following fields in json format as accurately as possible.
+    Keep the exact same names of the parameters case sensitive and if a certain field is not found, return the string "N/A".
+    check that your answer is in a valid json format and remove any redundant text from your answer:
     - Sent from (is the entity who sent the letter)
     - Subject (is the subject or title of this letter)
     - Date Received (is the date in which the letter was sent)
-    - Category (extract the context category based on text analysis)
+    - Category (extract the most applicable  category from the text out of these categories: "Bills",
+    "Financial Documents",
+    "Taxes",
+    "Official Documents",
+    "Healthcare",
+    "Education",
+    "Home",
+    "Work",
+    "Subscriptions",
+    "Travel",
+    "Government",
+    "Personal",
+    "Receipts",
+    "Miscellaneous")
     - Tags 
     - Actions
     - Preview
-    - Sent to (the receipient of the letter)
+    - Sent to (the receipient of the letter, no title just the name)
     - Notes
 
     Text: """
-
+    finalprompt = commandprompt + inputtext+"/n" 
     response = openai.Completion.create(
         engine="text-davinci-003",
-        prompt=prompt + inputtext,
-        max_tokens=200
+        prompt = finalprompt,
+        max_tokens=200, 
+        temperature =0
     )
-
-    extracted_fields = response.choices[0].text.strip()
-    if(extracted_fields == None):
+    for choice in response.choices:
+        print('choices from chatgpt: '+choice.text.strip())    
+    extracted_fields_from_ai = response.choices[0].text.strip()
+    print('extracted_fields from chatgpt:'+extracted_fields_from_ai) 
+    if(extracted_fields_from_ai  == None):
         print('could not extract fields from document')
         return
 
-    print('extracted fields: '+ extracted_fields)
-     #Extract specific fields using regular expressions
-    try:
-        sent_from = re.search(r"Sent from: (.+)", extracted_fields).group(1)
-        subject = re.search(r"Subject: (.+)", extracted_fields).group(1)
-        date_received = re.search(r"Date Received: (.+)", extracted_fields).group(1)
-        date_uploaded = datetime.datetime.now()
-        category = re.search(r"Category: (.+)", extracted_fields).group(1)
-        tags = re.search(r"Tags: (.+)", extracted_fields).group(1)
-        actions = re.search(r"Actions: (.+)", extracted_fields).group(1)
-        preview = re.search(r"Preview: (.+)", extracted_fields).group(1)
-        sent_to = re.search(r"Sent To: (.+)", extracted_fields).group(1)
-        notes = re.search(r"Notes: (.+)", extracted_fields).group(1)
-        #Print the extracted fields
-        print("Sent from:", sent_from)
-        print("Subject:", subject)
-        print("Date Received:", date_received)
-        print("Date Uploaded:", date_uploaded)
-        print("Category:", category)
-        print("Tags:", tags)
-        print("Actions:", actions)
-        print("Preview:", preview)
-        print("Sent to:", sent_to)
-        print("Notes:", notes)
-    except AttributeError:
-        return extracted_fields
+   
 
-    return extracted_fields
+    return extracted_fields_from_ai 
 
 
 def generate_file_name():
@@ -878,14 +963,28 @@ ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-    
+
+
+
+
 @app.route('/upload', methods=['POST'])
 def upload_file():
     try:
         #print (request.files)
         if 'picture' not in request.files and 'uploadedfile' not in request.files:
-            print ('error no pictur eor uploadedfile part')
+            print ('error no picture or uploadedfile part')
             return jsonify({'error': 'No file part'}), 400
+        
+        if  request.form.get('username') is None:
+            print ('error no user data available')
+            return jsonify({'error': 'no user data available'}), 400
+        
+        username = request.form.get('username')
+        email = request.form.get('email')
+        userid = request.form.get('userid') 
+        if userid is not None and username is not None and email is not None:
+            add_user(username,email,userid)
+        
         
         file = request.files['picture']
         if file.filename == '':
@@ -915,15 +1014,63 @@ def upload_file():
             #cv2.imshow('processed image',processedimg)
             #cv2.waitKey(0)
             rotate_img = cv2.rotate(processedimg, cv2.ROTATE_180)
-            cv2.imshow('rotated image',rotate_img)
-            cv2.waitKey(0)
+            #cv2.imshow('rotated image',rotate_img)
+            #cv2.waitKey(0)
             
             #processimageforocr(file_path)
             imagetext = image_to_text(rotate_img)
-            print('image_to_text output: '+imagetext+'End of image_to_text output')
+            #print('image_to_text output: '+imagetext+'End of image_to_text output')
             extracted_fields = ""
             if (imagetext != ""):
                 extracted_fields = extract_fields_from_text(imagetext)
+                print('extracted fields: '+ extracted_fields)
+                # Load the text as JSON
+                data = json.loads(extracted_fields)
+                print(data)
+                # Extract the fields
+                sent_from = data.get("Sent from")
+                subject = data.get("Subject")
+                date_received = data.get("Date Received")
+                category = data.get("Category")
+                tags = data.get("Tags")
+                actions = data.get("Actions")
+                preview = data.get("Preview")
+                sent_to = data.get("Sent to")
+                notes = data.get("Notes")
+                # Print the extracted fields
+                print("Sent from:", sent_from)
+                print("Subject:", subject)
+                print("Date Received:", date_received)
+                print("Category:", category)
+                print("Tags:", tags)
+                print("Actions:", actions)
+                print("Preview:", preview)
+                print("Sent to:", sent_to)
+                print("Notes:", notes)
+                date_uploaded = datetime.datetime.now()
+                add_letter(userid,sent_from,subject,date_received,date_uploaded,category,tags,actions,preview,sent_to,file_path,imagetext,notes)
+
+                #Extract specific fields using regular expressions
+               # try:
+               #     sent_from = re.search(r"Sent from: (.+)", extracted_fields).group(1)
+               #     print('sent_from')
+               #     subject = re.search(r"Subject: (.+)", extracted_fields).group(1)
+               #     print('subject')
+               #     date_received = re.search(r"Date Received: (.+)", extracted_fields).group(1)
+               #     print('date received')
+               #     date_uploaded = datetime.datetime.now()
+               #     print('date uploaded')
+               #     category = re.search(r"Category: (.+)", extracted_fields).group(1)
+               #     tags = re.search(r"Tags: (.+)", extracted_fields).group(1)
+               #     actions = re.search(r"Actions: (.+)", extracted_fields).group(1)
+               #     preview = re.search(r"Preview: (.+)", extracted_fields).group(1)
+               #     sent_to = re.search(r"Sent to: (.+)", extracted_fields).group(1)
+               #     notes = re.search(r"Notes: (.+)", extracted_fields).group(1)
+        
+               #     add_letter(userid,sent_from,subject,date_received,date_uploaded,category,tags,actions,preview,sent_to,file_path,imagetext,notes)
+               # except AttributeError :
+               #     traceback.print_exc()
+               #     return extracted_fields
             else:
                 print('error processing fields')
             currentfile = file
@@ -936,7 +1083,9 @@ def upload_file():
                 db.execute("INSERT INTO files (filename, filepath) VALUES (?, ?)", (filename, file_path))
             print ('File saved to database successfully')
             
-            return jsonify({'message': 'File uploaded successfully'+extracted_fields}), 200
+            #return jsonify({'message': 'File uploaded successfully'+extracted_fields}), 200
+            return jsonify( extracted_fields), 200
+        
         else:
             return jsonify({'error': 'Invalid file type'}), 400
     
@@ -947,6 +1096,7 @@ def upload_file():
 
 
 if __name__ == '__main__':
-    init_db()  # Initialize the database
+    #init_db()  # Initialize the database
+    create_tables()
     app.run(port=443, host="0.0.0.0", ssl_context=('cert.pem', 'key.pem'))
     
