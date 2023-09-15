@@ -25,6 +25,7 @@ openai.api_key = "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"
 
 # List of properties for each digitized letter
 letterproperties = [
+    "User Id"
     "Sent from",
     "Subject",
     "Date Received",
@@ -38,6 +39,7 @@ letterproperties = [
     "Searchable Content",
     "Notes"
 ]
+
 
 
 # List of categories for organizing digitized mail
@@ -76,6 +78,7 @@ UPLOAD_FOLDER ='uploads'
 DATABASE = 'file_db.sqlite'  # SQLite database file
 app.config['DATABASE'] = DATABASE
 
+maxLetterId = 0
 
 @dataclass
 class letterentry:
@@ -85,15 +88,19 @@ class letterentry:
 	category: str = 'General'
 	sender: str = 'Unknown'
 
+
+
 @dataclass
-class LetterEntry:
+class Letter:
+    letter_id: int
+    user_id: str
     sent_from: str
     subject: str
     date_received: str
     date_uploaded: str
     category: str
-    tags: list[str]
-    actions: list[str]
+    tags: str
+    actions: str
     preview: str
     sent_to: str
     source_image_path: str
@@ -115,12 +122,12 @@ def create_tables():
             email VARCHAR(100) NOT NULL
         )
         """
-        cursor.execute(create_users_table)
+        cursor.cursor().execute(create_users_table)
 
         # Create 'letters' table
         create_letters_table = """
         CREATE TABLE IF NOT EXISTS letters (
-            letter_id INT AUTO_INCREMENT PRIMARY KEY,
+            letter_id INT PRIMARY KEY NOT NULL ,
             user_id INT NOT NULL,
             sent_from VARCHAR(100),
             subject VARCHAR(200),
@@ -137,47 +144,150 @@ def create_tables():
             FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
         """
-        cursor.execute(create_letters_table)
-
-
+        cursor.cursor().execute(create_letters_table)
+        cursor.commit()
         print("Tables created successfully!")
 
+        #TEMP DB MANUPULATION
+    #    delete_letters = "DROP TABLE letters"
+    #    delete_letter = "DROP TABLE letter"
+    #    delete_letterpro = "DROP TABLE letterproperties"
+    #    cursor.execute(delete_letter)
+    #    cursor.cursor().execute(delete_letters)
+    #    cursor.execute(delete_letterpro)
+    #    cursor.commit()
+    #    print("Tables deleted successfully!")
+
+    # Insert letter into the 'letters' table
+    #    insert_query = "INSERT INTO letters (letter_id, user_id, sent_from, subject, date_received, date_uploaded, category, tags, actions, preview, sent_to, source_image_path, searchable_content, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    #    cursor.cursor().execute(insert_query, (1,0, "sent_from", "subject", "date_received", "date_uploaded", "category","tags","actions", "preview", "sent_to", "source_image_path", "searchable_content", "notes"))
+    #    cursor.commit()
+
+        
     except mysql.connector.Error as error:
         print("Error:", error)
 
+
+def decode( s):
+    regex_replacements = [
+        (re.compile(r'([^\\])\\([^\\])'), r'\1\\\\\2'),
+        (re.compile(r',(\s*])'), r'\1'),
+    ]
+    for regex, replacement in regex_replacements:
+        s = regex.sub(replacement, s)
+    return s
+  
 def add_letter(user_id, sent_from, subject, date_received, date_uploaded, category, tags, actions, preview, sent_to, source_image_path, searchable_content, notes):
-    print('adding letter.../n')
+    global maxLetterId
+    print('adding letter...')
     # Replace these with your own database credentials
-    cursor = get_db()
+    db = get_db()
+    cursor = db.cursor()
+    # Define the SQL query to retrieve the highest letter_id
+    maxidquery = "SELECT MAX(letter_id) FROM letters"
+
+    # Execute the query
+    cursor.execute(maxidquery)
+
+    # Fetch the result
+    maxLetterId = cursor.fetchone()[0]
+    
     try:
-        
+
+        query = "SELECT * FROM letters WHERE source_image_path = ?"
+        cursor.execute(query,(source_image_path,))
+        db.commit()
+        if(cursor.fetchone()):
+            print("Letter already exists")
+            row = cursor.fetchone()
+            letter = Letter(*row)
+            return letter.letter_id
+           
         # Insert letter into the 'letters' table
-        insert_query = """
-        INSERT INTO letters (user_id, sent_from, subject, date_received, date_uploaded, category, tags, actions, preview, sent_to, source_image_path, searchable_content, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
-        cursor.execute(insert_query, (user_id, sent_from, subject, date_received, date_uploaded, category, tags, actions, preview, sent_to, source_image_path, searchable_content, notes))
+        insert_query = "INSERT INTO letters (letter_id, user_id, sent_from, subject, date_received, date_uploaded, category, tags, actions, preview, sent_to, source_image_path, searchable_content, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        print('Executing query...')
+        maxLetterId=maxLetterId+1
+        cursor.execute(insert_query, (maxLetterId,user_id, sent_from, subject, date_received, date_uploaded, category, tags, actions, preview, sent_to, source_image_path, searchable_content, notes))
+        db.commit()
+        print('Fetching added letter...')
+         # Define the SQL query to retrieve the letter by its ID
+        select_query = "SELECT * FROM letters WHERE letter_id = ?"
+
+        # Execute the query with the letter_id
+        cursor.execute(select_query, (maxLetterId,))
+        row = cursor.fetchone()
+        ltr = Letter(*row)
 
         
         print("Letter added successfully!")
+        #return the letter ID
+        return ltr.letter_id
 
     except mysql.connector.Error as error:
         print("Error:", error)
 
 
 def add_user(username, email,userid):
-    print('adding user.../n')
-    cursor = get_db()
+    print('adding user...')
+    db = get_db()
+    cursor = db.cursor()
     try:
+        query = "SELECT * FROM users WHERE user_id = ?"
+        cursor.execute(query,(userid,))
+        db.commit()
+        if(cursor.fetchone()):
+            print("User already exists")
+            return
         # Insert user into the 'users' table
-        insert_query = "INSERT INTO users (username, email,user_id) VALUES (?, ?, ?)"
+        insert_query = "INSERT  INTO users (username, email,user_id) VALUES (?, ?, ?)"
         cursor.execute(insert_query,(username, email, userid))
-
+        db.commit()    
         print("User added successfully!")
 
     except mysql.connector.Error as error:
         print("Error:", error)
 
+def retrieve_letters_by_user_id(user_id):
+    print("retrieving letters for user: "+user_id)
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        
+        # Define your SQL query to retrieve letters by user ID
+        query = "SELECT * FROM letters WHERE user_id = ?"
+        # Execute the query with the user ID as a parameter
+        cursor.execute(query, (user_id,))        
+        # Fetch all the rows (letters) as dictionaries
+        db.commit()
+        rows = cursor.fetchall()
+        print("numbers of rows retrieved: "+str(len(rows)))
+            # Process each row as a Letter object
+        letters = []
+        lettersjson = []
+        index = 1
+        for row in rows:
+            print(f"Letter : "+ str(index))
+            index = index+1
+            letter = Letter(*row)  # Assuming the order of columns in the row matches the class constructor
+            letters.append(letter)
+        cursor.close()
+        # Now you have a list of Letter objects that you can work with
+        for index, letter in enumerate(letters, start=1):
+            print(f"Letter {index}:")
+            print(f"Sent From: {letter.sent_from}")
+            print(f"Subject: {letter.subject}")
+            # Add more processing as needed...
+        return letters
+        
+    except ValueError:
+        print("error: Invalid user ID format")
+        return jsonify({"error": "Invalid user ID format"}), 400
 
+
+    except mysql.connector.Error as err:
+        print("Database error:", err)
+        return jsonify({"error": "Database error"}), 500
+   
 
 def edit_letter(letter_id, new_subject, new_category, new_tags, new_actions, new_preview, new_notes):
     cursor = get_db()
@@ -262,76 +372,6 @@ def find_dest(pts):
 
 
 
-def scan_orig(imgfile):
-    img = cv2.imread(imgfile)
-    # Resize image to workable size
-    dim_limit = 1080
-    max_dim = max(img.shape)
-    if max_dim > dim_limit:
-        resize_scale = dim_limit / max_dim
-        img = cv2.resize(img, None, fx=resize_scale, fy=resize_scale)
-    # Create a copy of resized original image for later use
-    orig_img = img.copy()
-    # Repeated Closing operation to remove text from the document.
-    kernel = np.ones((5, 5), np.uint8)
-    img = cv2.morphologyEx(img, cv2.MORPH_CLOSE, kernel, iterations=3)
-    
-    cv2.imshow("blank", img)
-    
-    
-    # GrabCut
-    mask = np.zeros(img.shape[:2], np.uint8)
-    bgdModel = np.zeros((1, 65), np.float64)
-    fgdModel = np.zeros((1, 65), np.float64)
-    rect = (20, 20, img.shape[1] - 20, img.shape[0] - 20)
-    cv2.grabCut(img, mask, rect, bgdModel, fgdModel, 5, cv2.GC_INIT_WITH_RECT)
-    mask2 = np.where((mask == 2) | (mask == 0), 0, 1).astype('uint8')
-    img = img * mask2[:, :, np.newaxis]
- 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray = cv2.GaussianBlur(gray, (11, 11), 0)
-    # Edge Detection.
-    canny = cv2.Canny(gray, 0, 200)
-    canny = cv2.dilate(canny, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
- 
-    con = np.zeros_like(img)
-    # Finding contours for the detected edges.
-    contours, hierarchy = cv2.findContours(canny, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-    # Keeping only the largest detected contour.
-    page = sorted(contours, key=cv2.contourArea, reverse=True)[:5]
-    con = cv2.drawContours(con, page, -1, (0, 255, 255), 3)
-    cv2.imshow("Contour", con)
-
-    # Detecting Edges through Contour approximation.
-    # Loop over the contours.
-    if len(page) == 0:
-        return orig_img
-    for c in page:
-        # Approximate the contour.
-        epsilon = 0.02 * cv2.arcLength(c, True)
-        corners = cv2.approxPolyDP(c, epsilon, True)
-        # If our approximated contour has four points.
-        if len(corners) == 4:
-            break
-    # Sorting the corners and converting them to desired shape.
-    corners = sorted(np.concatenate(corners).tolist())
-    # For 4 corner points being detected.
-    corners = order_points(corners)
- 
-    destination_corners = find_dest(corners)
- 
-    h, w = orig_img.shape[:2]
-    # Getting the homography.
-    M = cv2.getPerspectiveTransform(np.float32(corners), np.float32(destination_corners))
-    # Perspective transform using homography.
-    final = cv2.warpPerspective(orig_img, M, (destination_corners[2][0], destination_corners[2][1]),
-                                flags=cv2.INTER_LINEAR)
-    
-    cv2.imshow("Final", final)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
-    return final
 
 def processimageforocr2(imgfilepath):
     
@@ -843,52 +883,77 @@ def detect_logos(image_path):
 def extract_fields_from_text(inputtext):
     commandprompt = """
     Act as a document analyzer with expertiese in understanding context from a document. 
-    Analyze the following text and extract the following fields in json format as accurately as possible.
+    Analyze the following text and extract the following fields. It is highly important that the your response will be in a valid json format! before returning the result string run a check to verify the json string is valid. if it is not valid clean it up to generate a valid json string. analyze as accurately as possible and use whichever resources you need to determine the closest match of the fields.
     Keep the exact same names of the parameters case sensitive and if a certain field is not found, return the string "N/A".
     check that your answer is in a valid json format and remove any redundant text from your answer:
-    - Sent from (is the entity who sent the letter)
-    - Subject (is the subject or title of this letter)
-    - Date Received (is the date in which the letter was sent)
-    - Category (extract the most applicable  category from the text out of these categories: "Bills",
-    "Financial Documents",
-    "Taxes",
-    "Official Documents",
+    1. sentFrom (is the entity who sent the letter)
+    2. subject (is the subject or title of this letter)
+    3. dateReceived (is the date in which the letter was sent)
+    4. category (extract the most applicable  category from the text out of these categories:
+    "Utilities"
+    "Taxes"
+    "Personal Finance" (credit cards, bank accounts etc.),
+    "Insurance",
+    "Transportation",
     "Healthcare",
     "Education",
-    "Home",
-    "Work",
-    "Subscriptions",
     "Travel",
-    "Government",
-    "Personal",
     "Receipts",
     "Miscellaneous")
-    - Tags 
-    - Actions
-    - Preview
-    - Sent to (the receipient of the letter, no title just the name)
-    - Notes
+    5. tags 
+    6. actions (any required actions from this text)
+    7. preview
+    8. sentTo (the receipient of the letter, no title just the name)
+    9. notes
 
     Text: """
     finalprompt = commandprompt + inputtext+"/n" 
     response = openai.Completion.create(
         engine="text-davinci-003",
         prompt = finalprompt,
-        max_tokens=200, 
+        max_tokens=500, 
         temperature =0
     )
     for choice in response.choices:
         print('choices from chatgpt: '+choice.text.strip())    
     extracted_fields_from_ai = response.choices[0].text.strip()
-    print('extracted_fields from chatgpt:'+extracted_fields_from_ai) 
-    if(extracted_fields_from_ai  == None):
+    finalresult = scrub_non_ascii(extracted_fields_from_ai)
+    # Find the starting delimiter of the JSON (e.g., '{')
+    start_index = finalresult.find('{')
+    returnedjson = finalresult
+    # Check if the JSON delimiter is found
+    if start_index != -1:
+        # Extract the JSON substring from the starting delimiter to the end
+        json_substring = finalresult[start_index:]
+
+        # Now, json_substring contains only the JSON part
+        returnedjson = json_substring
+    else:
+        # Handle the case where the JSON delimiter is not found
+        print("JSON delimiter not found in the input string.")
+        
+    returnedjson = decode(returnedjson)
+    end_index = returnedjson.find('}')
+    if(end_index == -1):
+        #missing closing '}'
+        returnedjson = returnedjson+'/"'+"}"
+    print('extracted_fields from chatgpt:'+finalresult) 
+    if(finalresult  == None):
         print('could not extract fields from document')
         return
 
    
 
-    return extracted_fields_from_ai 
+    return returnedjson
 
+def scrub_non_ascii(text):
+    # Use a regular expression to match non-ASCII characters
+    pattern = re.compile(r'[^\x00-\x7F]+')
+    
+    # Use the sub method to replace non-ASCII characters with an empty string
+    scrubbed_text = pattern.sub('', text)
+    
+    return scrubbed_text
 
 def generate_file_name():
     current_time = datetime.datetime.now()
@@ -901,11 +966,44 @@ def generate_file_name():
     return file_name
 
 def init_db():
+    global maxLetterId
+    create_tables()
+    maxLetterId = count_letters_table_rows()
+
+def count_letters_table_rows():
+    # Establish a database connection
+    db = get_db()
+
+    # Create a cursor
+    cursor = db.cursor()
+
+    # Define the SQL query to count rows in the 'letters' table
+    count_query = "SELECT COUNT(*) FROM letters;"
+
+    # Execute the query
+    cursor.execute(count_query)
+
+    # Fetch the result
+    row_count = cursor.fetchone()[0]
+
+    # Close the cursor and the database connection
+    cursor.close()
+    db.close()
+
+    return row_count
+
+
+
+
+def init_db_old():
     with app.app_context():
         db = get_db()
         with app.open_resource('schema.sql', mode='r') as f:
             db.cursor().executescript(f.read())
         db.commit()
+        cursor = db.cursor()
+        db.commit()
+
 
 def get_db():
     db = sqlite3.connect(app.config['DATABASE'])
@@ -965,6 +1063,29 @@ def allowed_file(filename):
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+@app.route('/delete_letter', methods=['GET'])
+def delete_letter():
+    ltr_id_str = request.args.get('letter_id')
+    print("letter id = "+ltr_id_str)
+    print(request.args)
+    db = get_db()
+    cursor = db.cursor()
+    query = "DELETE FROM letters WHERE letter_id = ?"
+    cursor.execute(query,(ltr_id_str,))
+    db.commit()
+    return jsonify("OK")    
+
+
+@app.route('/retrieve_letters', methods=['GET'])
+def retrieve_letters():
+    user_id_str = request.args.get('userid')
+    
+    if not user_id_str:
+        return jsonify({"error": "User ID parameter is missing"}), 400
+    letters = retrieve_letters_by_user_id(user_id_str)
+    return jsonify(letters)
+
+        
 
 
 @app.route('/upload', methods=['POST'])
@@ -1028,15 +1149,15 @@ def upload_file():
                 data = json.loads(extracted_fields)
                 print(data)
                 # Extract the fields
-                sent_from = data.get("Sent from")
-                subject = data.get("Subject")
-                date_received = data.get("Date Received")
-                category = data.get("Category")
-                tags = data.get("Tags")
-                actions = data.get("Actions")
-                preview = data.get("Preview")
-                sent_to = data.get("Sent to")
-                notes = data.get("Notes")
+                sent_from = data.get("sentFrom")
+                subject = data.get("subject")
+                date_received = data.get("dateReceived")
+                category = data.get("category")
+                tags = data.get("tags")
+                actions = data.get("actions")
+                preview = data.get("preview")
+                sent_to = data.get("sentTo")
+                notes = data.get("notes")
                 # Print the extracted fields
                 print("Sent from:", sent_from)
                 print("Subject:", subject)
@@ -1048,43 +1169,17 @@ def upload_file():
                 print("Sent to:", sent_to)
                 print("Notes:", notes)
                 date_uploaded = datetime.datetime.now()
-                add_letter(userid,sent_from,subject,date_received,date_uploaded,category,tags,actions,preview,sent_to,file_path,imagetext,notes)
-
-                #Extract specific fields using regular expressions
-               # try:
-               #     sent_from = re.search(r"Sent from: (.+)", extracted_fields).group(1)
-               #     print('sent_from')
-               #     subject = re.search(r"Subject: (.+)", extracted_fields).group(1)
-               #     print('subject')
-               #     date_received = re.search(r"Date Received: (.+)", extracted_fields).group(1)
-               #     print('date received')
-               #     date_uploaded = datetime.datetime.now()
-               #     print('date uploaded')
-               #     category = re.search(r"Category: (.+)", extracted_fields).group(1)
-               #     tags = re.search(r"Tags: (.+)", extracted_fields).group(1)
-               #     actions = re.search(r"Actions: (.+)", extracted_fields).group(1)
-               #     preview = re.search(r"Preview: (.+)", extracted_fields).group(1)
-               #     sent_to = re.search(r"Sent to: (.+)", extracted_fields).group(1)
-               #     notes = re.search(r"Notes: (.+)", extracted_fields).group(1)
-        
-               #     add_letter(userid,sent_from,subject,date_received,date_uploaded,category,tags,actions,preview,sent_to,file_path,imagetext,notes)
-               # except AttributeError :
-               #     traceback.print_exc()
-               #     return extracted_fields
+                letter_id = add_letter(userid,sent_from,subject,date_received,date_uploaded,category,tags,actions,preview,sent_to,file_path,imagetext,notes)
+                data ["letterId"] = str(letter_id)
+                data ["userId"] = str(userid)
+                data ["searchableContent"] = imagetext
+              #  responsejsn = json.dumps(data)
             else:
                 print('error processing fields')
-            currentfile = file
-            letter = process_letterentry(currentfile, file_path, filename)
-  
-            
-            # Save file data to the database  
-            db = get_db()
-            with db:
-                db.execute("INSERT INTO files (filename, filepath) VALUES (?, ?)", (filename, file_path))
-            print ('File saved to database successfully')
             
             #return jsonify({'message': 'File uploaded successfully'+extracted_fields}), 200
-            return jsonify( extracted_fields), 200
+            
+            return jsonify( data), 200
         
         else:
             return jsonify({'error': 'Invalid file type'}), 400
@@ -1096,7 +1191,7 @@ def upload_file():
 
 
 if __name__ == '__main__':
-    #init_db()  # Initialize the database
-    create_tables()
+    init_db()  # Initialize the database
+    #create_tables()
     app.run(port=443, host="0.0.0.0", ssl_context=('cert.pem', 'key.pem'))
     
