@@ -902,7 +902,7 @@ def extract_fields_from_text(inputtext):
     "Miscellaneous")
     5. tags 
     6. actions (any required actions from this text)
-    7. preview
+    7. preview (only one sentence)
     8. sentTo (the receipient of the letter, no title just the name)
     9. notes
 
@@ -911,7 +911,7 @@ def extract_fields_from_text(inputtext):
     response = openai.Completion.create(
         engine="text-davinci-003",
         prompt = finalprompt,
-        max_tokens=500, 
+        max_tokens=1000, 
         temperature =0
     )
     for choice in response.choices:
@@ -945,6 +945,18 @@ def extract_fields_from_text(inputtext):
    
 
     return returnedjson
+
+
+def checkgptversion():
+    commandprompt = "Which GPT architecture are you?"
+    response = openai.Completion.create(
+        engine="text-davinci-003",
+        prompt = commandprompt,
+        max_tokens=1000, 
+        temperature =0
+    )
+    print(response)
+    
 
 def scrub_non_ascii(text):
     # Use a regular expression to match non-ASCII characters
@@ -1192,6 +1204,7 @@ def upload_file():
 
 if __name__ == '__main__':
     init_db()  # Initialize the database
+    checkgptversion()
     #create_tables()
     app.run(port=443, host="0.0.0.0", ssl_context=('cert.pem', 'key.pem'))
     
