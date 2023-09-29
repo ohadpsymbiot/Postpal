@@ -908,12 +908,25 @@ def extract_fields_from_text(inputtext):
 
     Text: """
     finalprompt = commandprompt + inputtext+"/n" 
+
+    #response = openai.ChatCompletion.create(
+    #    model="gpt-4",
+    #    messages=[
+    #    {"role": "user", "content": finalprompt}
+    #    ],
+        #temperature = 0
+    #)
+
+
+
     response = openai.Completion.create(
-        engine="text-davinci-003",
+        engine="gpt-3.5-turbo-instruct",
         prompt = finalprompt,
         max_tokens=1000, 
         temperature =0
     )
+
+    
     for choice in response.choices:
         print('choices from chatgpt: '+choice.text.strip())    
     extracted_fields_from_ai = response.choices[0].text.strip()
@@ -949,8 +962,17 @@ def extract_fields_from_text(inputtext):
 
 def checkgptversion():
     commandprompt = "Which GPT architecture are you?"
+    response1 = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+        {"role": "user", "content": commandprompt}
+        ]
+    )
+    print(response1)
+
+
     response = openai.Completion.create(
-        engine="text-davinci-003",
+        engine="gpt-3.5-turbo-instruct",
         prompt = commandprompt,
         max_tokens=1000, 
         temperature =0
@@ -1204,7 +1226,7 @@ def upload_file():
 
 if __name__ == '__main__':
     init_db()  # Initialize the database
-    checkgptversion()
+    #checkgptversion()
     #create_tables()
-    app.run(port=443, host="0.0.0.0", ssl_context=('cert.pem', 'key.pem'))
+    app.run(port=443, host="0.0.0.0", ssl_context=('Postpal.pem'))
     
